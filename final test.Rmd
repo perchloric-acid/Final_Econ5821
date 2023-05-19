@@ -1,0 +1,301 @@
+---
+title: "final project"
+author: "LI Dongyang 1155187311"
+date: "2023-05-19"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+First, we load data into memory and perform a simple statistical analysis on the data. And data stands for train data
+
+```{r}
+set.seed(666)
+data <- load(url("https://github.com/zhentaoshi/Econ5821/raw/main/data_example/dataset_inf.Rdata"))
+oosdata <- load(url("https://github.com/zhentaoshi/Econ5821/raw/main/data_example/data_oos.Rdata"))
+summary(cpi)
+summary(ppi)
+summary(real.cpi)
+summary(real.ppi)
+```
+
+Then, we join the features, cpi and ppi together using \`month\`.
+
+```{r}
+
+data <- merge(X, cpi, by="month")
+data <- merge(data, ppi, by="month")
+
+oosdata <- merge(real.X, real.cpi, by="month")
+oosdata <- merge(oosdata, real.ppi, by="month")
+```
+
+We first try XGBoost.
+As XGBoost using specific data format, we must transform our data to DMatrix.
+```{r}
+library(xgboost)
+library(Matrix)
+
+train_data = data
+test_data = oosdata
+trainX = data.matrix(train_data[,c(2:152,154)])
+trainX = Matrix(trainX,sparse=T)
+trainY = train_data[,153]
+data = list(x = trainX, y = trainY )
+dtrain = xgb.DMatrix(data = data$x, label = data$y)
+
+testX = data.matrix(test_data[,c(2:152,154)])
+testX = Matrix(testX,sparse=T)
+testY = test_data[,153]
+data = list(x = testX, y = testY )
+dtest = xgb.DMatrix(data = data$x, label = data$y)
+
+```
+
+After preparing the training data and testing data, we start to train the XGBoost model， we tried different combinations of hyper-parameters. Lastly, we can get the best model below.
+
+```{r}
+xgb <- xgboost(data = dtrain,max_depth=4,eta=0.1, nround=246)
+#test data (oos r2)
+pre_xgb = predict(xgb,newdata = dtest)
+rss = var(testY - pre_xgb)
+tss = var(testY)
+oos_r2 = 1-rss/tss
+oos_r2
+#train data (is r2)
+pre_xgb = predict(xgb,newdata = dtrain)
+rss = var(trainY - pre_xgb)
+tss = var(trainY)
+is_r2 = 1-rss/tss
+is_r2
+```
+
+Then we use random forest.
+```{r}
+library(randomForest)
+
+rf = randomForest(CPI ~ . ,ntree=100, data = train_data)
+#test data (oos r2)
+pre_rf = predict(rf,newdata = test_data)
+rss = var(testY - pre_rf)
+tss = var(testY)
+oos_r2 = 1-rss/tss
+oos_r2
+#train data (is r2)
+pre_rf = predict(rf,newdata = train_data)
+rss = var(trainY - pre_rf)
+tss = var(trainY)
+is_r2 = 1-rss/tss
+is_r2
+```
+
+kNN
+```{r}
+library(caret)
+control = trainControl(method = 'cv',number = 10)
+kNN = train(CPI~.,train_data,
+               method = 'knn',
+               trControl = control,
+               tuneLength = 5)
+#test data (oos r2)
+pre_kNN = predict(kNN,newdata = test_data)
+rss = var(testY - pre_kNN)
+tss = var(testY)
+oos_r2 = 1-rss/tss
+oos_r2
+#train data (is r2)
+pre_kNN = predict(kNN,newdata = train_data)
+rss = var(trainY - pre_kNN)
+tss = var(trainY)
+is_r2 = 1-rss/tss
+is_r2
+```
+
+decision tree
+```{r}
+library(rpart)
+DT = rpart(CPI~., train_data)
+#test data (oos r2)
+pre_DT = predict(DT, newdata = test_data)
+rss = var(testY - pre_DT)
+tss = var(testY)
+oos_r2 = 1-rss/tss
+oos_r2
+#train data (is r2)
+pre_DT = predict(DT, newdata = train_data)
+rss = var(trainY - pre_DT)
+tss = var(trainY)
+is_r2 = 1-rss/tss
+is_r2
+```
+
+lasso
+```{r}
+library(glmnet)
+x = trainX
+y = trainY
+cv_lasso = cv.glmnet(x, y)
+lasso_result = glmnet(x, y, lambda = cv_lasso$lambda.min)
+#test data (oos r2)
+pre_lasso = predict(lasso_result, newx = testX)
+rss = var(testY - pre_lasso)
+tss = var(testY)
+oos_r2 = 1-rss/tss
+oos_r2
+#train data (is r2)
+pre_lasso = predict(lasso_result, newx = trainX)
+rss = var(trainY - pre_lasso)
+tss = var(trainY)
+is_r2 = 1-rss/tss
+is_r2
+```
+
+neural network
+```{r}
+library(neuralnet)
+nn = neuralnet(CPI ~ ., train_data,hidden = 5)
+#test data (oos r2)
+pre_nn = predict(nn, newdata = test_data)
+rss = var(testY - pre_nn)
+tss = var(testY)
+oos_r2 = 1-rss/tss
+oos_r2
+#train data (is r2)
+pre_nn = predict(nn, newdata = train_data)
+rss = var(trainY - pre_nn)
+tss = var(trainY)
+is_r2 = 1-rss/tss
+is_r2
+```
+By comparing the results of CPI above, we can see that the xgboost has the best r2 in the train data set, but lasso has the best r2 in the test data set.
+
+
+As for ppi, we first use XGBoost.
+```{r}
+PPItrainX = data.matrix(train_data[,c(2:153)])
+PPItrainX = Matrix(trainX,sparse=T)
+PPItrainY = train_data[,154]
+data = list(x = PPItrainX, y = PPItrainY )
+PPIdtrain = xgb.DMatrix(data = data$x, label = data$y)
+
+PPItestX = data.matrix(test_data[,c(2:153)])
+PPItestX = Matrix(testX,sparse=T)
+PPItestY = test_data[,154]
+data = list(x = PPItestX, y = PPItestY )
+PPIdtest = xgb.DMatrix(data = data$x, label = data$y)
+```
+
+```{r}
+PPIxgb <- xgboost(data = PPIdtrain, max_depth = 12, eta = 0.3,nround=63)
+#test data (oos r2)
+pre_PPIxgb = predict(PPIxgb,newdata = PPIdtest)
+rss = var(PPItestY - pre_PPIxgb)
+tss = var(PPItestY)
+oos_r2 = 1-rss/tss
+oos_r2
+#train data (is r2)
+pre_PPIxgb = predict(PPIxgb,newdata = PPIdtrain)
+rss = var(PPItrainY - pre_PPIxgb)
+tss = var(PPItrainY)
+is_r2 = 1-rss/tss
+is_r2
+```
+
+randomForest
+```{r}
+rf = randomForest(PPI ~ . , data = train_data,ntree = 500)
+
+#test data (oos r2)
+pre_rf = predict(rf,newdata = test_data)
+rss = var(PPItestY - pre_rf)
+tss = var(PPItestY)
+oos_r2 = 1-rss/tss
+oos_r2
+#train data (is r2)
+pre_rf = predict(rf,newdata = train_data)
+rss = var(PPItrainY - pre_rf)
+tss = var(PPItrainY)
+is_r2 = 1-rss/tss
+is_r2
+```
+
+kNN
+```{r}
+control = trainControl(method = 'cv',number = 10)
+kNN = train(PPI~.,train_data,
+               method = 'knn',
+               trControl = control,
+               tuneLength = 5)
+#test data (oos r2)
+pre_kNN = predict(kNN,newdata = test_data)
+rss = var(PPItestY - pre_kNN)
+tss = var(PPItestY)
+oos_r2 = 1-rss/tss
+oos_r2
+#train data (is r2)
+pre_kNN = predict(kNN,newdata = train_data)
+rss = var(PPItrainY - pre_kNN)
+tss = var(PPItrainY)
+is_r2 = 1-rss/tss
+is_r2
+```
+
+decision tree
+```{r}
+DT = rpart(PPI~., train_data)
+#test data (oos r2)
+pre_DT = predict(DT, newdata = test_data)
+rss = var(PPItestY - pre_DT)
+tss = var(PPItestY)
+oos_r2 = 1-rss/tss
+oos_r2
+#train data (is r2)
+pre_DT = predict(DT, newdata = train_data)
+rss = var(PPItrainY - pre_DT)
+tss = var(PPItrainY)
+is_r2 = 1-rss/tss
+is_r2
+```
+
+lasso
+```{r}
+x = PPItrainX
+y = PPItrainY
+cv_lasso = cv.glmnet(x, y)
+lasso_result = glmnet(x, y, lambda = cv_lasso$lambda.min)
+#test data (oos r2)
+pre_lasso = predict(lasso_result, newx = PPItestX)
+rss = var(PPItestY - pre_lasso)
+tss = var(PPItestY)
+oos_r2 = 1-rss/tss
+oos_r2
+#train data (is r2)
+pre_lasso = predict(lasso_result, newx = PPItrainX)
+rss = var(PPItrainY - pre_lasso)
+tss = var(PPItrainY)
+is_r2 = 1-rss/tss
+is_r2
+```
+
+neural network
+```{r}
+nn = neuralnet(PPI ~ ., train_data,hidden = 20)
+#test data (oos r2)
+pre_nn = predict(nn, newdata = test_data)
+rss = var(PPItestY - pre_nn)
+tss = var(PPItestY)
+oos_r2 = 1-rss/tss
+oos_r2
+#train data (is r2)
+pre_nn = predict(nn, newdata = train_data)
+rss = var(PPItrainY - pre_nn)
+tss = var(PPItrainY)
+is_r2 = 1-rss/tss
+is_r2
+```
+
+By comparing the results of PPI above, we can see that the xgboost has the best r2 in the train data set, but lasso has the best r2 in the test data set.
+
+We can now use lasso to make the prediction of both CPI and PPI.
