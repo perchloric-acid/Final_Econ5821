@@ -1,8 +1,12 @@
 # Final_Econ5821
 This is a repository for the final project of Econ5821.
 
-This repository has three files: rmd, html, and ipynb.
+This repository has four files: final.rmd, final.ipynb, final test.rmd, final test.ipynb.
 
-The html file is knitted by the rmd file, and the ipynb file uses r as its kernel.
+The "final" files(final.rmd, final.ipynb) are the codes and models using previous data before May 19th.
+
+The "final test"(final test.rmd, final test.ipynb) files are the codes and models using real test data.
+
+All of the ipynb files use r as their kernel.
 
 All of the prediction effects are evaluated by r square.
